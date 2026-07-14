@@ -1,0 +1,7 @@
+services:
+  chall:
+    build: .
+    ports:
+      - "1024:1024"
+    environment:
+      FLAG: "plfanzen{b3tt3r_le4ve_jerry_bur1ed_33f4f9ebb78ec779f3d76ce621f6}"

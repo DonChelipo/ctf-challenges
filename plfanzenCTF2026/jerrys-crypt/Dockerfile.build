@@ -1,0 +1,32 @@
+# dockerfile used to build the shipped binaries
+# run with:
+# docker build --output=. -f Dockerfile.build .
+
+FROM ubuntu:noble-20251001@sha256:66460d557b25769b102175144d538d88219c077c678a49af4afca6fbfc1b5252 AS builder
+ENV DEBIAN_FRONTEND=noninteractive
+# make image reproducible
+RUN \
+    --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    : "${SOURCE_DATE_EPOCH:=$(stat --format=%Y /etc/apt/sources.list.d/ubuntu.sources)}" && \
+    snapshot="$(/bin/bash -euc "printf \"%(%Y%m%dT%H%M%SZ)T\n\" \"${SOURCE_DATE_EPOCH}\"")" && \
+    : "Enabling snapshot" && \
+    sed -i -e '/Types: deb/ a\Snapshot: true' /etc/apt/sources.list.d/ubuntu.sources && \
+    : "Enabling cache" && \
+    rm -f /etc/apt/apt.conf.d/docker-clean && \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' >/etc/apt/apt.conf.d/keep-cache && \
+    : "Fetching the snapshot and installing ca-certificates in one command" && \
+    apt-get install --update --snapshot "${snapshot}" -o Acquire::Check-Valid-Until=false -o Acquire::https::Verify-Peer=false -y ca-certificates && \
+    : "Installing packages" && \
+    apt-get install --snapshot "${snapshot}" -y --no-install-recommends build-essential git python3 cmake && \
+    : "Clean up for improving reproducibility (optional)" && \
+    rm -rf /var/log/* /var/cache/ldconfig/aux-cache
+
+RUN git clone https://github.com/jerryscript-project/jerryscript /jerry
+RUN cd /jerry && \
+    git checkout "50200152feb724a74a5f64e44d7885151537cfad" && \
+    python3 tools/build.py --clean --strip OFF
+
+FROM scratch AS binary
+COPY --from=builder /jerry/build/bin/jerry /lib/x86_64-linux-gnu/libc.so.6 /lib64/ld-linux-x86-64.so.2 .
+
