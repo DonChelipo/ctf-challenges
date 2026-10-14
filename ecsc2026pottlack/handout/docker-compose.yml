@@ -1,0 +1,6 @@
+services:
+  chal:
+    build:
+      context: .
+    ports:
+      - 1024:1024
